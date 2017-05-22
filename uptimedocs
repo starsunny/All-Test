@@ -1,0 +1,116 @@
+/*
+Uptime installation and configuration
+*/
+
+Step 1 - Install build-essentials and update gcc to latest version(as of this writing gcc is latest)
+       -   sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+       -   sudo apt-get update
+       -   sudo apt-get install gcc-6 g++-6
+       -   sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 40 --slave /usr/bin/g++ g++ /usr/bin/g++-6
+       -   sudo update-alternatives --config gcc
+
+Step 2 - Install nodejs and npm
+       -   wget https://nodejs.org/dist/v4.2.1/node-v4.2.1-linux-x64.tar.gz
+       -   cd /usr/local
+       -   apt-get install nodejs-legacy
+       -   apt install npm
+       -   node -v
+       -   npm -v
+
+Step 3 - Download and install current version of node-uptime
+       -   cd /opt
+       -   git clone https://github.com/fzaninotto/uptime.git node-uptime
+       -   cd node-uptime
+       -   sudo npm install
+
+Step 4 - Configure MongoDB access for node-uptime
+       -   cd /opt/node-uptime
+       -   sudo gedit config/default.yaml
+            "mongodb:
+                server:   localhost
+                database: uptime
+                user:     username
+                password:    passsword
+                connectionString: mongodb://localhost/uptime"
+
+Step 5 - Install MongoDB
+       -  sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 7F0CEB10
+       -  sudo echo 'deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen' | sudo tee /etc/apt/sources.list.d/mongodb.list
+       -  sudo apt-get update
+       -  sudo apt-get install mongodb-10gen
+
+Step 6 - Create a mongodb admin user 
+       -  mongo
+       -  use admin
+       -  db.addUser( { user: "username", pwd: "password", roles: [ "userAdminAnyDatabase" ] } )
+
+
+Step 7 - Install supervisord to autostart as a service node-uptime
+       -  sudo apt-get -yq install python-setuptools
+       - sudo easy_install supervisor
+       - sudo echo_supervisord_conf > /etc/supervisord.conf
+
+
+Step 8 - Edit supervisord config and add node-uptime (add this to bottom of file)
+       - sudo gedit /etc/supervisord.conf
+
+         "[program:node-uptime]
+          command=node app.js
+          numprocs=1
+	  #root dir of node-uptime
+          directory=/opt/node-uptime
+          stdout_logfile=/var/log/node-uptime.log
+          stderr_logfile=/var/log/node-uptime_error.log 
+          autostart=true
+          autorestart=true"
+
+Step 9 - Create a supervisord deamon, add this to /etc/init.d/supervisord
+       - sudo gedit /etc/init.d/supervisord
+
+         #! /bin/bash -e
+
+	SUPERVISORD=/usr/local/bin/supervisord
+	PIDFILE=/tmp/supervisord.pid
+	OPTS="-c /etc/supervisord.conf"
+
+	test -x $SUPERVISORD || exit 0
+
+	. /lib/lsb/init-functions
+
+	export PATH="${PATH:+$PATH:}/usr/local/bin:/usr/sbin:/sbin"
+
+	case "$1" in
+  	start)
+    	log_begin_msg "Starting Supervisor daemon manager..."
+    	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $SUPERVISORD -- $OPTS || log_end_msg 1
+    	log_end_msg 0
+    	;;
+ 	 stop)
+   	 log_begin_msg "Stopping Supervisor daemon manager..."
+    	start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE || log_end_msg 1
+    	log_end_msg 0
+    	;;
+
+  	restart|reload|force-reload)
+    	log_begin_msg "Restarting Supervisor daemon manager..."
+    	start-stop-daemon --stop --quiet --oknodo --retry 30 --pidfile $PIDFILE
+    	start-stop-daemon --start --quiet --pidfile /var/run/sshd.pid --exec $SUPERVISORD -- $OPTS || log_end_msg 1
+    	log_end_msg 0
+    	;;
+
+ 	 *)
+   	 log_success_msg "Usage: /etc/init.d/supervisor
+	{start|stop|reload|force-reload|restart}"
+   	 exit 1
+	esac
+
+	exit 0
+
+Step 10 - Make the supervisord daemon execute magically
+        - sudo chmod +x /etc/init.d/supervisord
+
+Step 11 - Restart supervisord
+        - sudo service supervisord restart
+
+
+Now Open browser and type : http://localhost:8082/
